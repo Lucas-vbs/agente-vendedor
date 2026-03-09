@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
+
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
@@ -28,13 +31,25 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('orca_api_key') || '');
   const [isKeySaved, setIsKeySaved] = useState(!!localStorage.getItem('orca_api_key'));
+  const [notification, setNotification] = useState(null);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const showNotification = (message, type = "success") => {
+    setNotification({ message, type });
+  };
 
   const saveApiKey = () => {
     if (apiKey.trim()) {
       localStorage.setItem('orca_api_key', apiKey.trim());
       setIsKeySaved(true);
-      alert("Chave de API salva com sucesso! 🛡️");
+      showNotification("Chave de API salva com sucesso! 🛡️");
     }
   };
 
@@ -55,10 +70,63 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
+  const generatePDF = (content) => {
+    try {
+      const doc = new jsPDF();
+
+      // Header
+      doc.setFontSize(22);
+      doc.setTextColor(33, 134, 54); // Incomel Green
+      doc.text("Incomel Materiais Elétricos", 105, 20, { align: "center" });
+
+      doc.setFontSize(12);
+      doc.setTextColor(100);
+      doc.text("Orçamento Inteligente AI", 105, 28, { align: "center" });
+
+      doc.setDrawColor(200);
+      doc.line(20, 35, 190, 35);
+
+      // Extract items from content if any
+      const lines = content.split('\n');
+      const tableData = [];
+      lines.forEach(line => {
+        const itemMatch = line.match(/\[(.*?)\]\s+(.*?)\s+-\s+([\d,.]+)\s+\/\s+(\w+)/);
+        if (itemMatch) {
+          tableData.push([itemMatch[1], itemMatch[2], itemMatch[3], itemMatch[4]]);
+        }
+      });
+
+      if (tableData.length > 0) {
+        doc.autoTable({
+          startY: 45,
+          head: [['Código', 'Descrição', 'Preço Unit.', 'Unidade']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillStyle: [33, 134, 54] }
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        const splitText = doc.splitTextToSize(content, 170);
+        doc.text(splitText, 20, 45);
+      }
+
+      const dateStr = new Date().toLocaleDateString('pt-BR');
+      doc.setFontSize(8);
+      doc.text(`Gerado em: ${dateStr}`, 20, doc.internal.pageSize.height - 10);
+
+      doc.save(`Orcamento_Incomel_${Date.now()}.pdf`);
+      showNotification("PDF gerado com sucesso!");
+    } catch (error) {
+      console.error("PDF Error:", error);
+      showNotification("Erro ao gerar PDF", "error");
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
     if (!apiKey) {
-      alert("Por favor, configure sua Google API Key (Gemini) na barra lateral.");
+      showNotification("Por favor, configure sua Google API Key (Gemini) na barra lateral.", "error");
       return;
     }
 
@@ -69,23 +137,34 @@ export default function App() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
 
     try {
       // SMART SEARCH STRATEGY: Find relevant products locally first
-      const searchTerms = input.toLowerCase()
-        .replace(/(preciso de|me vê|tem|queria|gostaria|um|uma|o|a|de|para)/g, '')
-        .split(' ')
-        .filter(t => t.length > 2);
+      const cleanInput = currentInput.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+        .replace(/(preciso de|me ve|tem|queria|gostaria|um|uma|o|a|de|para|com|preco|quanto|custa)/g, '');
+
+      const searchTerms = cleanInput.split(/\s+/).filter(t => t.length > 2);
 
       let relevantProducts = [];
       if (searchTerms.length > 0) {
         relevantProducts = products.filter(p => {
-          const desc = p.descricao.toLowerCase();
-          const grupo = p.grupo.toLowerCase();
+          const desc = p.descricao.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const grupo = p.grupo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           return searchTerms.some(term => desc.includes(term) || grupo.includes(term));
-        }).slice(0, 25); // Top 25 matches for precision
+        });
+
+        // Smart Sort: prioritize those that match multiple terms
+        relevantProducts.sort((a, b) => {
+          const aMatch = searchTerms.filter(t => a.descricao.toLowerCase().includes(t)).length;
+          const bMatch = searchTerms.filter(t => b.descricao.toLowerCase().includes(t)).length;
+          return bMatch - aMatch;
+        });
+
+        relevantProducts = relevantProducts.slice(0, 30);
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -94,16 +173,13 @@ export default function App() {
         systemInstruction: `Você é o "OrçaElétrico", o melhor vendedor da Incomel Materiais Elétricos.
         
         DIRETRIZES:
-        1. Responda em Português com tom profissional mas prestativo.
-        2. Use os DADOS DE PRODUTOS abaixo para dar preços REAIS e precisos. Se o produto não estiver na lista abaixo, informe que não o encontrou no sistema no momento.
-        3. Formate orçamentos em listas claras: [CÓDIGO] DESCRIÇÃO - PREÇO / UNIDADE.
-        4. No final, ofereça para revisar ou fechar o orçamento.
-        5. NÃO INVENTE PREÇOS.
+        1. Responda em Portugês com tom profissional mas prestativo.
+        2. Use os DADOS DE PRODUTOS abaixo para dar preços REAIS e precisos. 
+        3. Formate orçamentos RIGOROSAMENTE assim para que o sistema gere o PDF: [CÓDIGO] DESCRIÇÃO - PREÇO / UNIDADE.
+        4. Sempre que listar produtos, ofereça o botão de download de PDF (o sistema mostrará automaticamente se o formato estiver correto).
         
-        DADOS DE PRODUTOS ENCONTRADOS NO SISTEMA (CONTEÚDO DINÂMICO):
-        ${relevantProducts.length > 0 ? JSON.stringify(relevantProducts) : "Nenhum resultado exato na busca primária. Peça detalhes ao cliente."}
-        
-        NOTA: O cliente é soberano. Se ele pedir algo que você não encontrou, tente sugerir produtos similares da lista se fizer sentido técnico.
+        DADOS DE PRODUTOS ENCONTRADOS NO SISTEMA:
+        ${relevantProducts.length > 0 ? JSON.stringify(relevantProducts) : "Nenhum resultado exato na busca primária. Peça detalhes ao cliente (bitola, marca, etc)."}
         `,
       });
 
@@ -253,6 +329,15 @@ export default function App() {
                         <div key={idx} className="mb-2 whitespace-pre-wrap">{line}</div>
                       ))}
                     </div>
+                    {m.role === "assistant" && m.content.includes('[') && m.content.includes(']') && (
+                      <button
+                        onClick={() => generatePDF(m.content)}
+                        className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-[#238636] hover:bg-[#2eaa42] text-white rounded-lg text-xs font-bold transition-all shadow-lg"
+                      >
+                        <Download size={14} />
+                        Baixar Orçamento em PDF
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -319,6 +404,27 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Notifications */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className={cn(
+              "fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-2xl z-[100] font-medium text-sm flex items-center gap-3 backdrop-blur-xl border",
+              notification.type === "error" ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-[#23863620] text-green-400 border-green-500/30"
+            )}
+          >
+            <div className={cn(
+              "w-2 h-2 rounded-full animate-pulse",
+              notification.type === "error" ? "bg-red-500" : "bg-green-500"
+            )}></div>
+            {notification.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
