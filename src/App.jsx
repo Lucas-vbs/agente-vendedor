@@ -190,7 +190,7 @@ export default function App() {
         })),
       });
 
-      const result = await chat.sendMessage(input);
+      const result = await chat.sendMessage(currentInput);
       const responseText = result.response.text();
 
       setMessages(prev => [...prev, {
@@ -199,12 +199,23 @@ export default function App() {
         timestamp: new Date()
       }]);
     } catch (error) {
-      console.error(error);
+      console.error("Gemini Error:", error);
+      let errorMsg = "Ops! Tive um problema técnico.";
+
+      if (error.message?.includes("API_KEY_INVALID")) {
+        errorMsg = "Chave de API inválida! Verifique se copiou corretamente do Google AI Studio.";
+      } else if (error.message?.includes("429") || error.message?.includes("QUOTA")) {
+        errorMsg = "Limite de uso atingido. Tente novamente em alguns segundos.";
+      } else {
+        errorMsg = `Erro: ${error.message?.substring(0, 50)}...`;
+      }
+
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "Ops! Tive um problema ao processar sua solicitação. Verifique sua conexão ou chave de API.",
+        content: errorMsg,
         timestamp: new Date()
       }]);
+      showNotification(errorMsg, "error");
     } finally {
       setIsLoading(false);
     }
