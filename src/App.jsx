@@ -183,12 +183,18 @@ export default function App() {
         `,
       });
 
-      const chat = model.startChat({
-        history: messages.map(m => ({
+      const history = messages
+        .map(m => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
-        })),
-      });
+        }))
+        .filter((_, idx, arr) => {
+          // Find the first index where role is 'user'
+          const firstUserIdx = arr.findIndex(item => item.role === 'user');
+          return idx >= firstUserIdx;
+        });
+
+      const chat = model.startChat({ history });
 
       const result = await chat.sendMessage(currentInput);
       const responseText = result.response.text();
