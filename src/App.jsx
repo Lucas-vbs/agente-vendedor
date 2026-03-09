@@ -26,8 +26,17 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [apiKey, setApiKey] = useState(API_KEY);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('orca_api_key') || '');
+  const [isKeySaved, setIsKeySaved] = useState(!!localStorage.getItem('orca_api_key'));
   const messagesEndRef = useRef(null);
+
+  const saveApiKey = () => {
+    if (apiKey.trim()) {
+      localStorage.setItem('orca_api_key', apiKey.trim());
+      setIsKeySaved(true);
+      alert("Chave de API salva com sucesso! 🛡️");
+    }
+  };
 
   useEffect(() => {
     // Load local products database for client-side search simulation
@@ -161,14 +170,27 @@ export default function App() {
                 <div className="px-2 space-y-2">
                   <label className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider flex items-center justify-between">
                     Google API Key
+                    {isKeySaved && <span className="text-green-500 font-bold">✓ Salva</span>}
                   </label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Insira sua chave..."
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        setIsKeySaved(false);
+                      }}
+                      placeholder="Insira sua chave..."
+                      className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    />
+                    <button
+                      onClick={saveApiKey}
+                      className="p-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-lg text-blue-400 transition-colors"
+                      title="Salvar Chave"
+                    >
+                      <Zap size={14} fill={isKeySaved ? "currentColor" : "none"} />
+                    </button>
+                  </div>
                   <p className="text-[10px] text-[#8b949e]">
                     Salva apenas localmente no seu navegador.
                   </p>
