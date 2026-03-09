@@ -188,10 +188,9 @@ export default function App() {
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
         }))
-        .filter((_, idx, arr) => {
-          // Find the first index where role is 'user'
-          const firstUserIdx = arr.findIndex(item => item.role === 'user');
-          return idx >= firstUserIdx;
+        .filter((item, idx, arr) => {
+          const firstUserIdx = arr.findIndex(i => i.role === 'user');
+          return firstUserIdx !== -1 && idx >= firstUserIdx;
         });
 
       const chat = model.startChat({ history });
