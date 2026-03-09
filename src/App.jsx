@@ -161,21 +161,16 @@ export default function App() {
                 <div className="px-2 space-y-2">
                   <label className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider flex items-center justify-between">
                     Google API Key
-                    {import.meta.env.VITE_GOOGLE_API_KEY && <span className="text-green-500 flex items-center gap-1 font-bold">✓ Active</span>}
                   </label>
                   <input
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={import.meta.env.VITE_GOOGLE_API_KEY ? "••••••••••••••••" : "Insira sua chave..."}
-                    disabled={!!import.meta.env.VITE_GOOGLE_API_KEY}
-                    className={cn(
-                      "w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none transition-all",
-                      import.meta.env.VITE_GOOGLE_API_KEY && "border-green-500/30 opacity-70"
-                    )}
+                    placeholder="Insira sua chave..."
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                   />
                   <p className="text-[10px] text-[#8b949e]">
-                    {import.meta.env.VITE_GOOGLE_API_KEY ? "Configurado automaticamente via sistema." : "Salva apenas localmente no seu navegador."}
+                    Salva apenas localmente no seu navegador.
                   </p>
                 </div>
               </div>
